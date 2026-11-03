@@ -11,7 +11,7 @@ public final class TrialPlan {
    JSONObject selected=saved.optJSONObject(index);StepSpec.from(selected);
    JSONObject trial=new JSONObject(macro.toString());
    trial.put("steps",new JSONArray().put(new JSONObject(selected.toString())));
-   trial.put("repeat",1).put("trialStep",index+1);
+   trial.put("repeat",1).put("infinite",false).put("trialStep",index+1);
    return trial;
   }catch(JSONException e){throw new IllegalArgumentException("Không đọc được bước cần thử",e);}
  }

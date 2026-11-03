@@ -7,9 +7,10 @@ public final class TrialPlanTest {
  static void bad(JSONObject macro,int i,String label){boolean thrown=false;try{TrialPlan.singleStep(macro,i);}catch(IllegalArgumentException e){thrown=true;}ok(thrown,label);}
  public static void main(String[] args)throws Exception{
   JSONObject selected=step("tap").put("image","sample_123.png");
-  JSONObject macro=new JSONObject().put("id",456).put("name","Kịch bản gốc").put("repeat",1000).put("threshold",94).put("interval",2500).put("timeout",30).put("steps",new JSONArray().put(step("home")).put(selected).put(step("back")));
+  JSONObject macro=new JSONObject().put("id",456).put("name","Kịch bản gốc").put("repeat",1000).put("infinite",true).put("threshold",94).put("interval",2500).put("timeout",30).put("steps",new JSONArray().put(step("home")).put(selected).put(step("back")));
   String before=macro.toString();JSONObject trial=TrialPlan.singleStep(macro,1);
   ok(trial.getInt("repeat")==1,"Trial never inherits the saved repeat count");
+  ok(!trial.getBoolean("infinite")&&macro.getBoolean("infinite"),"Trial clears infinite mode without changing saved choice");
   ok(trial.getJSONArray("steps").length()==1,"Only selected step runs");
   ok(trial.getJSONArray("steps").getJSONObject(0).getString("action").equals("tap"),"Correct selected action");
   ok(trial.getInt("trialStep")==2,"Original step number is retained");

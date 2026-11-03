@@ -1,6 +1,11 @@
-# Chạm Ảnh 0.2.1
+# Chạm Ảnh 0.2.2
 
 Ứng dụng Android tạo kịch bản tự động bằng các thẻ thao tác. Giao diện và tên riêng, có quy trình làm macro tương tự các công cụ tự động hóa; không thuộc Macrofy. Android 11 trở lên, không cần root.
+
+## Mới trong 0.2.2: lặp vô hạn
+Mở kịch bản → **Cài đặt kịch bản → Lặp vô hạn** → **Lưu thiết lập** → Chạy. Thanh nổi hiển thị **Vòng n · Vô hạn**, tiếp tục sang vòng kế tiếp mà không giới hạn 1000 vòng. Bấm DỪNG để kết thúc; tạm dừng/TIẾP vẫn dùng được. Khi gặp lỗi, hết thời gian tìm ảnh hoặc dịch vụ bị tắt, kịch bản vẫn dừng.
+
+Tắt Lặp vô hạn để dùng số vòng 1–1000 như trước. Số vòng cụ thể đã nhập được giữ lại khi bật chế độ vô hạn. **▶ Thử** luôn chỉ chạy đúng một lần, kể cả kịch bản đang bật vô hạn.
 
 ## Mới trong 0.2.1: thử từng bước
 Mỗi thẻ có nút **▶ Thử**. Chọn bước → xác nhận **Thử sau 5 giây** → chuyển sang ứng dụng đích. Phiên thử chỉ thực hiện hành động của bước đó đúng một lần, không chạy các bước khác và không dùng số vòng lặp của kịch bản. Thời gian quét, độ khớp và hạn chờ ảnh vẫn giữ theo kịch bản.
@@ -19,7 +24,7 @@ Thanh nổi ghi **THỬ BƯỚC n**, có tạm dừng/tiếp tục và dừng. K
 - Chờ 100 ms đến 10 phút.
 
 ## Trình tạo kịch bản
-- Tối đa 100 bước, 1–1000 vòng lặp; đặt thời gian nghỉ sau mỗi bước 0–60000 ms.
+- Tối đa 100 bước, 1–1000 vòng lặp hoặc lặp vô hạn; đặt thời gian nghỉ sau mỗi bước 0–60000 ms.
 - Các thẻ có tên, biểu tượng, thông số và nút Sửa bước.
 - Menu ⋯ để sao chép bước, chuyển lên/xuống, xóa bước.
 - Bộ chọn Thêm thao tác chia thành các ô lớn, dễ tìm.
@@ -32,7 +37,7 @@ Thanh nổi ghi **THỬ BƯỚC n**, có tạm dừng/tiếp tục và dừng. K
 ```sh
 termux-setup-storage
 pkg install curl -y
-curl -fL -o ~/storage/downloads/ChamAnh.apk https://raw.githubusercontent.com/scode85/taitool/main/cham-anh/ChamAnh-0.2.1.apk
+curl -fL -o ~/storage/downloads/ChamAnh.apk https://raw.githubusercontent.com/scode85/taitool/main/cham-anh/ChamAnh-0.2.2.apk
 termux-open --view --content-type application/vnd.android.package-archive ~/storage/downloads/ChamAnh.apk
 ```
 Cho phép bộ nhớ sau lệnh đầu; cho phép Termux cài ứng dụng nếu Android yêu cầu.
@@ -73,7 +78,7 @@ ANDROID_SDK_ROOT=/duong/dan/sdk BUILD_TOOLS_PATH=/duong/dan/sdk/build-tools/35.0
 ECJ được kèm trong source ZIP; Eclipse Public License2.0: https://www.eclipse.org/legal/epl-2.0/. Khóa thử nghiệm sinh cục bộ trong build/local-test.jks; không đưa khóa lên GitHub và cần giữ khóa để cập nhật cài đè.
 
 ## Kiểm tra
-91 kiểm tra JVM đã qua: 26 về nhận diện ảnh, 42 về loại bước/tham số/đồng hồ và 23 về phiên thử từng bước, ảnh cũ, tính độc lập dữ liệu và loại trừ bước khác. Biên dịch APK, kiểm tra tài nguyên/manifest, căn chỉnh và chữ ký; đối chiếu chứng chỉ ký với bản cũ để hỗ trợ cập nhật giữ dữ liệu.
+136 kiểm tra JVM đã qua: 26 về nhận diện ảnh, 42 về loại bước/tham số/đồng hồ, 24 về thử từng bước và 44 về lặp hữu hạn/vô hạn, tương thích cấu hình cũ, phiên thử chỉ chạy một lần và chống tràn bộ đếm. Biên dịch APK, kiểm tra tài nguyên/manifest, căn chỉnh và chữ ký; đối chiếu chứng chỉ ký với bản cũ để hỗ trợ cập nhật giữ dữ liệu.
 
 ```sh
 mkdir -p tests/lib
