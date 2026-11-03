@@ -1,5 +1,5 @@
 <resources>
- <string name="service_description">Chạm Ảnh chụp màn hình để tìm ảnh mẫu và thực hiện thao tác chạm trong kịch bản do bạn tạo. Chỉ chạy khi bạn bấm Chạy; có nút Dừng nổi. Ảnh được xử lý trên thiết bị, không có quyền Internet. Tắt dịch vụ này để thu hồi quyền.</string>
+ <string name="service_description">Chạm Ảnh chụp màn hình để tìm ảnh mẫu và thực hiện chạm, vuốt và điều hướng hệ thống trong kịch bản do bạn tạo. Chỉ chạy khi bạn bấm Chạy; có nút Dừng nổi. Ảnh được xử lý trên thiết bị, không có quyền Internet. Tắt dịch vụ này để thu hồi quyền.</string>
  <color name="brand_blue">#3446C8</color>
  <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
   <item name="android:fontFamily">sans</item><item name="android:colorAccent">#3446C8</item>

@@ -2,5 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/test-classes
-java -jar "${ECJ_JAR:-ecj.jar}" -source 8 -target 8 -d build/test-classes src/vn/chamanh/ImageMatcher.java tests/vn/chamanh/ImageMatcherTest.java
+java -jar "${ECJ_JAR:-ecj.jar}" -source 8 -target 8 -classpath tests/lib/json.jar -d build/test-classes src/vn/chamanh/ImageMatcher.java src/vn/chamanh/StepSpec.java src/vn/chamanh/RunClock.java tests/vn/chamanh/*.java
 java -cp build/test-classes vn.chamanh.ImageMatcherTest
+java -cp build/test-classes:tests/lib/json.jar vn.chamanh.StepSpecTest

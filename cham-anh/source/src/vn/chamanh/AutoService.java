@@ -1,274 +1,109 @@
 package vn.chamanh;
-
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.app.KeyguardManager;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Color;
-import android.graphics.Path;
-import android.graphics.PixelFormat;
-import android.graphics.Rect;
+import android.graphics.*;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.HardwareBuffer;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.PowerManager;
-import android.os.SystemClock;
-import android.view.Display;
-import android.view.Gravity;
-import android.view.MotionEvent;
-import android.view.View;
-import android.view.WindowManager;
+import android.os.*;
+import android.view.*;
 import android.view.accessibility.AccessibilityEvent;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-import android.widget.Toast;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.util.ArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import android.widget.*;
+import org.json.*;
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.*;
 
-/** User-started, on-device image macros. Nothing starts when accessibility is enabled. */
+/** Explicit user-started automation. All execution stops when the service disconnects. */
 public class AutoService extends AccessibilityService {
-    public static volatile AutoService instance;
-    public static volatile boolean running;
-    public static volatile String status="Sẵn sàng";
-    public static volatile long activeMacroId=-1;
-
-    private final Handler main=new Handler(Looper.getMainLooper());
-    private final ExecutorService worker=Executors.newSingleThreadExecutor();
-    private volatile long generation;
-    private Future<?> work;
-    private WindowManager windows;
-    private LinearLayout controls;
-    private TextView statusView;
-    private WindowManager.LayoutParams controlParams;
-    private boolean captureMode, screenshotPending, prepared;
-    private String foregroundPackage="";
-    private ArrayList<Step> steps;
-    private int stepIndex,cycle,repeats,intervalMs,timeoutMs;
-    private double threshold;
-    private long startAt,stepDeadline;
-    private static final long MAX_SCREEN_PIXELS=8000000L;
-    private static final long MAX_TEMPLATE_PIXELS=2000000L;
-    private static final long MAX_ALL_TEMPLATE_PIXELS=4000000L;
-
-    private static final class Step {
-        String label,action;
-        int[] pixels;
-        int width,height,delay;
-    }
-
-    @Override protected void onServiceConnected(){
-        super.onServiceConnected();
-        windows=getSystemService(WindowManager.class);
-        instance=this;
-        running=false;
-        activeMacroId=-1;
-        status="Trợ năng đã kết nối · Chưa chạy";
-    }
-
-    @Override public void onAccessibilityEvent(AccessibilityEvent event){
-        if(event.getEventType()!=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED||event.getPackageName()==null)return;
-        String pkg=event.getPackageName().toString();
-        String name=event.getClassName()==null?"":event.getClassName().toString();
-        // Our own accessibility toolbar must not be mistaken for the foreground Activity.
-        if(pkg.equals(getPackageName())&&!name.endsWith("MainActivity")&&!event.isFullScreen())return;
-        foregroundPackage=pkg;
-    }
-
-    public void startMacro(JSONObject input){
-        if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->startMacro(input));return;}
-        stopInternal(null,false);
-        try{
-            if(input==null)throw new IllegalArgumentException("Không tìm thấy macro");
-            final JSONObject macro=new JSONObject(input.toString());
-            JSONArray raw=macro.optJSONArray("steps");
-            if(raw==null||raw.length()==0||raw.length()>20)throw new IllegalArgumentException("Macro cần từ 1 đến 20 bước");
-            repeats=bounded(macro.optInt("repeat",1),1,1000,"Số vòng lặp");
-            intervalMs=bounded(macro.optInt("interval",1500),1000,60000,"Khoảng kiểm tra");
-            timeoutMs=bounded(macro.optInt("timeout",15),1,120,"Thời gian chờ")*1000;
-            threshold=bounded(macro.optInt("threshold",92),70,99,"Độ khớp")/100.0;
-            final long token=++generation;
-            running=true;
-            prepared=false;
-            activeMacroId=macro.optLong("id",-1);
-            foregroundPackage=getPackageName();
-            cycle=0;stepIndex=0;stepDeadline=0;
-            startAt=SystemClock.elapsedRealtime()+5000;
-            status="Chuẩn bị · Mở ứng dụng đích trong 5 giây";
-            if(!showControls(false)){stopInternal("Không hiển thị được nút dừng",true);return;}
-            work=worker.submit(()->{
-                try{
-                    ArrayList<Step> loaded=loadSteps(macro.optJSONArray("steps"));
-                    main.post(()->{if(!valid(token))return;steps=loaded;prepared=true;});
-                }catch(Exception e){main.post(()->fail(token,e.getMessage()));}
-                catch(OutOfMemoryError e){main.post(()->fail(token,"Ảnh mẫu quá lớn. Hãy cắt vùng nhỏ hơn."));}
-            });
-            later(token,100);
-        }catch(Exception e){stopInternal(e.getMessage(),true);}
-    }
-
-    private int bounded(int value,int min,int max,String title){
-        if(value<min||value>max)throw new IllegalArgumentException(title+" không hợp lệ");
-        return value;
-    }
-
-    private ArrayList<Step> loadSteps(JSONArray source)throws Exception{
-        ArrayList<Step> result=new ArrayList<>();
-        long total=0;
-        for(int i=0;i<source.length();i++){
-            if(Thread.currentThread().isInterrupted())throw new InterruptedException();
-            JSONObject raw=source.getJSONObject(i);
-            File file=MacroStore.image(this,raw.optString("image"));
-            BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;
-            BitmapFactory.decodeFile(file.getAbsolutePath(),bounds);
-            long pixels=(long)bounds.outWidth*bounds.outHeight;
-            if(bounds.outWidth<8||bounds.outHeight<8||pixels>MAX_TEMPLATE_PIXELS||pixels<1)
-                throw new IllegalArgumentException("Ảnh bước "+(i+1)+" thiếu hoặc quá lớn. Chọn lại vùng mẫu.");
-            total+=pixels;
-            if(total>MAX_ALL_TEMPLATE_PIXELS)throw new IllegalArgumentException("Tổng ảnh mẫu quá lớn. Hãy cắt nhỏ các vùng mẫu.");
-            BitmapFactory.Options opts=new BitmapFactory.Options();opts.inPreferredConfig=Bitmap.Config.ARGB_8888;
-            Bitmap bitmap=BitmapFactory.decodeFile(file.getAbsolutePath(),opts);
-            if(bitmap==null)throw new IllegalArgumentException("Không đọc được ảnh bước "+(i+1));
-            Step step=new Step();
-            try{
-                step.width=bitmap.getWidth();step.height=bitmap.getHeight();
-                step.pixels=new int[step.width*step.height];
-                bitmap.getPixels(step.pixels,0,step.width,0,0,step.width,step.height);
-            }finally{bitmap.recycle();}
-            if(!ImageMatcher.hasUsableDetail(step.pixels,step.width,step.height))
-                throw new IllegalArgumentException("Ảnh bước "+(i+1)+" ít chi tiết. Chọn vùng có chữ hoặc biểu tượng rõ.");
-            step.label=raw.optString("label","Bước "+(i+1));
-            step.action=raw.optString("action","tap");
-            if(!"tap".equals(step.action)&&!"wait".equals(step.action))throw new IllegalArgumentException("Loại bước không hợp lệ");
-            step.delay=bounded(raw.optInt("delay",500),0,10000,"Độ trễ bước");
-            result.add(step);
-        }
-        return result;
-    }
-
-    private boolean valid(long token){return running&&generation==token&&instance==this;}
-    private void later(long token,long delay){main.postDelayed(()->tick(token),delay);}
-    private void setStatus(String message){status=message;if(statusView!=null)statusView.setText(message);}
-    private boolean unlocked(){return getSystemService(PowerManager.class).isInteractive()&&!getSystemService(KeyguardManager.class).isKeyguardLocked();}
-    private boolean protectedPackage(){
-        return foregroundPackage.isEmpty()||foregroundPackage.equals(getPackageName())||foregroundPackage.equals("android")
-            ||foregroundPackage.equals("com.android.settings")||foregroundPackage.equals("com.android.systemui")
-            ||foregroundPackage.contains("permissioncontroller");
-    }
-
-    private void tick(long token){
-        if(!valid(token)||screenshotPending)return;
-        long now=SystemClock.elapsedRealtime();
-        if(now<startAt){setStatus("Mở ứng dụng đích · "+((startAt-now+999)/1000)+" giây");later(token,250);return;}
-        if(!prepared){setStatus("Đang nạp ảnh mẫu…");later(token,250);return;}
-        if(!unlocked()){if(stepDeadline>0)stepDeadline+=1000;setStatus("Tạm chờ · Hãy mở khóa màn hình");later(token,1000);return;}
-        if(protectedPackage()){if(stepDeadline>0)stepDeadline+=1000;setStatus("Mở ứng dụng đích để tiếp tục");later(token,1000);return;}
-        if(stepDeadline==0)stepDeadline=now+timeoutMs;
-        if(now>=stepDeadline){fail(token,"Hết thời gian tìm ảnh ở bước "+(stepIndex+1));return;}
-        setStatus("Vòng "+(cycle+1)+"/"+repeats+" · "+steps.get(stepIndex).label);
-        final int rotation=windows.getDefaultDisplay().getRotation();
-        final String observedPackage=foregroundPackage;
-        final long capturedAt=SystemClock.elapsedRealtime();
-        screenshotPending=true;
-        try{
-            takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),new TakeScreenshotCallback(){
-                @Override public void onSuccess(ScreenshotResult screenshot){
-                    if(!valid(token)){screenshot.getHardwareBuffer().close();return;}
-                    final Bitmap image;
-                    try{image=copyScreenshot(screenshot);}catch(Exception e){screenshotPending=false;fail(token,e.getMessage());return;}
-                    catch(OutOfMemoryError e){screenshotPending=false;fail(token,"Màn hình quá lớn để xử lý an toàn");return;}
-                    final Step step=steps.get(stepIndex);
-                    final Rect excluded=controlRect();
-                    work=worker.submit(()->{
-                        try{
-                            int width=image.getWidth(),height=image.getHeight();
-                            int[] pixels=new int[width*height];
-                            image.getPixels(pixels,0,width,0,0,width,height);image.recycle();
-                            // Mask the small floating toolbar so it cannot match its own text or buttons.
-                            if(excluded!=null){int x0=Math.max(0,excluded.left),y0=Math.max(0,excluded.top),x1=Math.min(width,excluded.right),y1=Math.min(height,excluded.bottom);
-                                for(int y=y0;y<y1;y++)for(int x=x0;x<x1;x++)pixels[y*width+x]=Color.MAGENTA;}
-                            ImageMatcher.Result match=ImageMatcher.find(pixels,width,height,step.pixels,step.width,step.height,threshold);
-                            main.post(()->handleMatch(token,rotation,observedPackage,capturedAt,step,match,excluded));
-                        }catch(Exception e){if(!image.isRecycled())image.recycle();main.post(()->{if(valid(token)){screenshotPending=false;fail(token,"Không xử lý được ảnh. Hãy chọn mẫu nhỏ hơn.");}});}
-                        catch(OutOfMemoryError e){if(!image.isRecycled())image.recycle();main.post(()->{if(valid(token)){screenshotPending=false;fail(token,"Ảnh quá lớn. Hãy cắt vùng mẫu nhỏ hơn.");}});}
-                    });
-                }
-                @Override public void onFailure(int error){
-                    if(!valid(token))return;screenshotPending=false;
-                    if(error==ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT){later(token,1000);return;}
-                    fail(token,"Không chụp được màn hình ("+error+"). Ứng dụng đích có thể chặn chụp ảnh.");
-                }
-            });
-        }catch(Exception e){screenshotPending=false;fail(token,"Không có quyền chụp màn hình qua Trợ năng");}
-    }
-
-    private Bitmap copyScreenshot(ScreenshotResult screenshot){
-        HardwareBuffer buffer=screenshot.getHardwareBuffer();Bitmap hardware=null;
-        try{
-            if((long)buffer.getWidth()*buffer.getHeight()>MAX_SCREEN_PIXELS)throw new IllegalArgumentException("Độ phân giải màn hình quá lớn. Hãy giảm độ phân giải.");
-            hardware=Bitmap.wrapHardwareBuffer(buffer,screenshot.getColorSpace());
-            if(hardware==null)throw new IllegalStateException("Không đọc được ảnh màn hình");
-            Bitmap copy=hardware.copy(Bitmap.Config.ARGB_8888,false);
-            if(copy==null)throw new IllegalStateException("Không sao chép được màn hình");
-            return copy;
-        }finally{if(hardware!=null)hardware.recycle();buffer.close();}
-    }
-
-    private void handleMatch(long token,int rotation,String observedPackage,long capturedAt,Step step,ImageMatcher.Result match,Rect excluded){
-        if(!valid(token))return;screenshotPending=false;
-        if(!unlocked()||protectedPackage()||!observedPackage.equals(foregroundPackage)||rotation!=windows.getDefaultDisplay().getRotation()||SystemClock.elapsedRealtime()-capturedAt>2500){later(token,1000);return;}
-        if(match==null||(excluded!=null&&excluded.contains(match.centerX,match.centerY))){later(token,intervalMs);return;}
-        if(SystemClock.elapsedRealtime()>=stepDeadline){fail(token,"Hết thời gian tìm ảnh ở bước "+(stepIndex+1));return;}
-        if("wait".equals(step.action)){setStatus("Đã thấy ảnh · "+Math.round(match.score*100)+"%");advance(token,step.delay);return;}
-        Path path=new Path();path.moveTo(match.centerX,match.centerY);
-        GestureDescription gesture=new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,70)).build();
-        setStatus("Chạm bước "+(stepIndex+1)+" · "+Math.round(match.score*100)+"%");
-        boolean dispatched=dispatchGesture(gesture,new GestureResultCallback(){
-            @Override public void onCompleted(GestureDescription g){if(valid(token))advance(token,step.delay);}
-            @Override public void onCancelled(GestureDescription g){if(valid(token))fail(token,"Thao tác bị hủy. Macro đã dừng.");}
-        },main);
-        if(!dispatched)fail(token,"Android từ chối thao tác chạm. Hãy kiểm tra quyền Trợ năng.");
-    }
-
-    private void advance(long token,int delay){
-        if(!valid(token))return;
-        stepIndex++;stepDeadline=0;
-        if(stepIndex>=steps.size()){
-            stepIndex=0;cycle++;
-            if(cycle>=repeats){stopInternal("Đã hoàn thành "+repeats+" vòng",true);return;}
-            delay=Math.max(delay,intervalMs);
-        }
-        later(token,Math.max(350,delay));
-    }
-    private void fail(long token,String reason){if(valid(token))stopInternal(reason==null?"Không chạy được macro":reason,true);}
-
-    public void stopMacro(String reason){
-        if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->stopMacro(reason));return;}
-        stopInternal(reason==null?"Đã dừng":reason,true);
-    }
-    private void stopInternal(String reason,boolean showToast){
-        ++generation;running=false;captureMode=false;screenshotPending=false;prepared=false;activeMacroId=-1;
-        main.removeCallbacksAndMessages(null);
-        if(work!=null){work.cancel(true);work=null;}
-        steps=null;removeControls();
-        if(reason!=null&&!reason.isEmpty()){status=reason;if(showToast)Toast.makeText(this,reason,Toast.LENGTH_LONG).show();}
-    }
-
+ public static volatile AutoService instance;
+ public static volatile boolean running,paused;
+ public static volatile String status="Sẵn sàng";
+ public static volatile long activeMacroId=-1;
+ private final Handler main=new Handler(Looper.getMainLooper());
+ private final ExecutorService worker=Executors.newSingleThreadExecutor();
+ private volatile long generation;
+ private long visionEpoch;private boolean wasLocked;
+ private Future<?> work;
+ private WindowManager windows;
+ private LinearLayout controls;
+ private TextView statusView,pauseView;
+ private WindowManager.LayoutParams controlParams;
+ private boolean captureMode,screenshotPending,prepared,busy;
+ private String foregroundPackage="",pointMode="";
+ private ArrayList<Step> steps;
+ private int stepIndex,cycle,repeats,intervalMs,timeoutMs;
+ private double threshold;
+ private long startAt,stepDeadline,dueAt,sleepUntil;
+ private RunClock clock;
+ private static final long MAX_SCREEN_PIXELS=8000000L,MAX_TEMPLATE_PIXELS=2000000L,MAX_ALL_TEMPLATE_PIXELS=4000000L;
+ private static final class Step {StepSpec spec;int[] pixels;int width,height;}
+ @Override protected void onServiceConnected(){super.onServiceConnected();windows=getSystemService(WindowManager.class);instance=this;running=paused=false;activeMacroId=-1;status="Trợ năng đã kết nối · Sẵn sàng";}
+ @Override public void onAccessibilityEvent(AccessibilityEvent e){if(e.getEventType()!=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED||e.getPackageName()==null)return;String pkg=e.getPackageName().toString(),name=e.getClassName()==null?"":e.getClassName().toString();if(pkg.equals(getPackageName())&&!name.endsWith("MainActivity")&&!e.isFullScreen())return;foregroundPackage=pkg;}
+ private boolean unlocked(){return getSystemService(PowerManager.class).isInteractive()&&!getSystemService(KeyguardManager.class).isKeyguardLocked();}
+ private boolean protectedPackage(){return foregroundPackage.isEmpty()||foregroundPackage.equals(getPackageName())||foregroundPackage.equals("android")||foregroundPackage.equals("com.android.settings")||foregroundPackage.contains("permissioncontroller");}
+ private boolean valid(long token){return running&&generation==token&&instance==this;}
+ private int bounded(int n,int lo,int hi,String label){if(n<lo||n>hi)throw new IllegalArgumentException(label+" không hợp lệ");return n;}
+ private long now(){long real=SystemClock.elapsedRealtime();boolean locked=!unlocked();if(locked&&!wasLocked)visionEpoch++;wasLocked=locked;clock.setPaused(paused||locked,real);return clock.now(real);}
+ private void setStatus(String s){status=s;if(statusView!=null)statusView.setText(s);}
+ public void startMacro(JSONObject input){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->startMacro(input));return;}stopInternal(null,false);try{
+  JSONObject macro=new JSONObject(input.toString());JSONArray raw=macro.optJSONArray("steps");if(raw==null||raw.length()<1||raw.length()>100)throw new IllegalArgumentException("Kịch bản cần từ 1 đến 100 bước");
+  repeats=bounded(macro.optInt("repeat",1),1,1000,"Số vòng");intervalMs=bounded(macro.optInt("interval",1500),1000,60000,"Khoảng quét");timeoutMs=bounded(macro.optInt("timeout",15),1,120,"Thời gian chờ")*1000;threshold=bounded(macro.optInt("threshold",92),70,99,"Độ khớp")/100.0;
+  long token=++generation;clock=new RunClock();running=true;paused=false;prepared=busy=false;activeMacroId=macro.optLong("id");foregroundPackage=getPackageName();cycle=stepIndex=0;stepDeadline=sleepUntil=0;startAt=now()+5000;dueAt=startAt;status="Chuẩn bị · Chạy sau 5 giây";
+  if(!showControls(false)){stopInternal("Không hiển thị được nút DỪNG",true);return;}
+  work=worker.submit(()->{try{ArrayList<Step> loaded=loadSteps(raw);main.post(()->{if(valid(token)){steps=loaded;prepared=true;}});}catch(Exception e){main.post(()->fail(token,e.getMessage()));}catch(OutOfMemoryError e){main.post(()->fail(token,"Ảnh mẫu quá lớn. Hãy cắt nhỏ hơn."));}});
+  schedule(token,0);
+ }catch(Exception e){stopInternal(e.getMessage(),true);}}
+ private ArrayList<Step> loadSteps(JSONArray source)throws Exception {ArrayList<Step> loaded=new ArrayList<>();HashMap<String,Step> cache=new HashMap<>();long total=0;for(int i=0;i<source.length();i++){
+  if(Thread.currentThread().isInterrupted())throw new InterruptedException();Step step=new Step();try{step.spec=StepSpec.from(source.optJSONObject(i));}catch(IllegalArgumentException e){throw new IllegalArgumentException("Bước "+(i+1)+": "+e.getMessage());}
+  if(StepSpec.imageAction(step.spec.action)&&cache.containsKey(step.spec.image)){Step old=cache.get(step.spec.image);step.width=old.width;step.height=old.height;step.pixels=old.pixels;}else if(StepSpec.imageAction(step.spec.action)){File f=MacroStore.image(this,step.spec.image);BitmapFactory.Options b=new BitmapFactory.Options();b.inJustDecodeBounds=true;BitmapFactory.decodeFile(f.getPath(),b);long size=(long)b.outWidth*b.outHeight;if(b.outWidth<8||b.outHeight<8||size>MAX_TEMPLATE_PIXELS||size<1)throw new IllegalArgumentException("Ảnh bước "+(i+1)+" thiếu hoặc quá lớn");total+=size;if(total>MAX_ALL_TEMPLATE_PIXELS)throw new IllegalArgumentException("Tổng ảnh mẫu vượt 4 megapixel");BitmapFactory.Options o=new BitmapFactory.Options();o.inPreferredConfig=Bitmap.Config.ARGB_8888;Bitmap bitmap=BitmapFactory.decodeFile(f.getPath(),o);if(bitmap==null)throw new IllegalArgumentException("Không đọc được ảnh mẫu");try{step.width=bitmap.getWidth();step.height=bitmap.getHeight();step.pixels=new int[step.width*step.height];bitmap.getPixels(step.pixels,0,step.width,0,0,step.width,step.height);}finally{bitmap.recycle();}if(!ImageMatcher.hasUsableDetail(step.pixels,step.width,step.height))throw new IllegalArgumentException("Ảnh bước "+(i+1)+" ít chi tiết");cache.put(step.spec.image,step);}
+  if("launch_app".equals(step.spec.action)&&getPackageManager().getLaunchIntentForPackage(step.spec.packageName)==null)throw new IllegalArgumentException("Ứng dụng cần mở không còn trên máy");loaded.add(step);
+ }return loaded;}
+ private void schedule(long token,long ms){main.postDelayed(()->tick(token),ms);}
+ private void tick(long token){if(!valid(token))return;long n=now();schedule(token,200);
+  if(paused){setStatus("Đã tạm dừng · Bấm TIẾP để chạy");return;}if(!unlocked()){setStatus("Đang chờ mở khóa màn hình");return;}
+  if(n<startAt){setStatus("Bắt đầu sau "+((startAt-n+999)/1000)+" giây");return;}if(!prepared){setStatus("Đang nạp kịch bản…");return;}if(busy)return;
+  if(n<dueAt){setStatus("Chờ "+((dueAt-n+999)/1000)+" giây · Bước "+(stepIndex+1)+"/"+steps.size());return;}
+  Step s=steps.get(stepIndex);StepSpec p=s.spec;String a=p.action;setStatus("Vòng "+(cycle+1)+"/"+repeats+" · Bước "+(stepIndex+1)+"/"+steps.size()+" · "+p.label);
+  if((StepSpec.imageAction(a)||StepSpec.coordinateAction(a))&&protectedPackage()){setStatus("Mở ứng dụng đích để thực hiện bước "+(stepIndex+1));stepDeadline=0;return;}
+  if(StepSpec.imageAction(a)){if(stepDeadline==0)stepDeadline=n+timeoutMs;if(n>=stepDeadline){fail(token,"Không thấy ảnh ở bước "+(stepIndex+1)+" trong thời gian chờ");return;}findImage(token,s);return;}
+  if(StepSpec.coordinateAction(a)){android.util.DisplayMetrics dm=new android.util.DisplayMetrics();windows.getDefaultDisplay().getRealMetrics(dm);if(!p.fitsScreen(dm.widthPixels,dm.heightPixels)){fail(token,"Tọa độ khác hướng hoặc tỷ lệ màn hình. Hãy chọn lại điểm.");return;}gesture(token,p,StepSpec.pixel(p.x,dm.widthPixels),StepSpec.pixel(p.y,dm.heightPixels),StepSpec.pixel(p.x2,dm.widthPixels),StepSpec.pixel(p.y2,dm.heightPixels));return;}
+  if("sleep".equals(a)){if(sleepUntil==0)sleepUntil=n+p.waitMs;if(n<sleepUntil){setStatus("Chờ "+((sleepUntil-n+999)/1000)+" giây · Bước "+(stepIndex+1)+"/"+steps.size());return;}sleepUntil=0;advance(token,0);return;}
+  if("launch_app".equals(a)){try{Intent launch=getPackageManager().getLaunchIntentForPackage(p.packageName);if(launch==null)throw new IllegalStateException();launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(launch);advance(token,0);}catch(Exception e){fail(token,"Không mở được ứng dụng ở bước "+(stepIndex+1));}return;}
+  int global="home".equals(a)?GLOBAL_ACTION_HOME:"back".equals(a)?GLOBAL_ACTION_BACK:"notifications".equals(a)?GLOBAL_ACTION_NOTIFICATIONS:"quick_settings".equals(a)?GLOBAL_ACTION_QUICK_SETTINGS:"recents".equals(a)?GLOBAL_ACTION_RECENTS:0;
+  if(global==0||!performGlobalAction(global)){fail(token,"Android không thực hiện được "+StepSpec.title(a));return;}advance(token,0);
+ }
+ private void findImage(long token,Step step){
+  busy=screenshotPending=true;final int rotation=windows.getDefaultDisplay().getRotation();final String pkg=foregroundPackage;final long captured=SystemClock.elapsedRealtime();final long vision=visionEpoch;final Rect excluded=controlRect();
+  try{takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),new TakeScreenshotCallback(){
+   @Override public void onSuccess(ScreenshotResult result){if(!valid(token)){result.getHardwareBuffer().close();return;}if(paused||vision!=visionEpoch){result.getHardwareBuffer().close();busy=screenshotPending=false;return;}final Bitmap image;try{image=copyScreenshot(result);}catch(Exception e){busy=screenshotPending=false;fail(token,e.getMessage());return;}catch(OutOfMemoryError e){busy=screenshotPending=false;fail(token,"Không đủ bộ nhớ để chụp màn hình");return;}
+    work=worker.submit(()->{try{int w=image.getWidth(),h=image.getHeight();int[] pix=new int[w*h];image.getPixels(pix,0,w,0,0,w,h);image.recycle();if(excluded!=null)for(int y=Math.max(0,excluded.top);y<Math.min(h,excluded.bottom);y++)for(int x=Math.max(0,excluded.left);x<Math.min(w,excluded.right);x++)pix[y*w+x]=Color.MAGENTA;ImageMatcher.Result match=ImageMatcher.find(pix,w,h,step.pixels,step.width,step.height,threshold);
+     main.post(()->{if(!valid(token))return;busy=screenshotPending=false;if(paused||vision!=visionEpoch||!unlocked()||protectedPackage()||!pkg.equals(foregroundPackage)||rotation!=windows.getDefaultDisplay().getRotation()||SystemClock.elapsedRealtime()-captured>2500)return;if(match==null||(excluded!=null&&excluded.contains(match.centerX,match.centerY))){dueAt=now()+intervalMs;return;}if(now()>=stepDeadline){fail(token,"Hết thời gian chờ ảnh");return;}if("wait".equals(step.spec.action))advance(token,0);else gesture(token,step.spec,match.centerX,match.centerY,match.centerX,match.centerY);});
+    }catch(Exception e){if(!image.isRecycled())image.recycle();main.post(()->fail(token,"Không xử lý được ảnh màn hình"));}catch(OutOfMemoryError e){if(!image.isRecycled())image.recycle();main.post(()->fail(token,"Không đủ bộ nhớ nhận diện ảnh"));}});
+   }
+   @Override public void onFailure(int error){if(!valid(token))return;busy=screenshotPending=false;if(error==ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT){dueAt=now()+1000;return;}fail(token,"Không chụp được màn hình ("+error+"). Ứng dụng có thể chặn ảnh chụp.");}
+  });}catch(Exception e){busy=screenshotPending=false;fail(token,"Chưa có quyền chụp màn hình qua Trợ năng");}
+ }
+ private void gesture(long token,StepSpec s,int x,int y,int x2,int y2){if(!valid(token)||paused||!unlocked())return;Rect overlay=controlRect();if(overlay!=null){for(int i=0;i<=100;i++){int tx=x+(x2-x)*i/100,ty=y+(y2-y)*i/100;if(overlay.contains(tx,ty)){fail(token,"Thanh nổi đang che thao tác. Kéo thanh nổi ra ngoài vùng chạm rồi chạy lại.");return;}}}
+  Path path=new Path();path.moveTo(x,y);boolean swipe="swipe".equals(s.action);if(swipe)path.lineTo(x2,y2);boolean twice=s.action.contains("double_tap");int duration=swipe||s.action.contains("long_press")?s.duration:70;GestureDescription.Builder builder=new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,duration));if(twice)builder.addStroke(new GestureDescription.StrokeDescription(path,180,70));busy=true;
+  try{boolean ok=dispatchGesture(builder.build(),new GestureResultCallback(){@Override public void onCompleted(GestureDescription g){if(valid(token)){busy=false;advance(token,0);}}@Override public void onCancelled(GestureDescription g){if(valid(token))fail(token,"Cử chỉ bị hủy. Kịch bản đã dừng.");}},main);if(!ok)fail(token,"Android từ chối thao tác chạm");}catch(Exception e){fail(token,"Tọa độ hoặc cử chỉ không hợp lệ");}
+ }
+ private void advance(long token,long extra){if(!valid(token))return;int delay=steps.get(stepIndex).spec.delay;stepIndex++;stepDeadline=sleepUntil=0;if(stepIndex>=steps.size()){stepIndex=0;cycle++;if(cycle>=repeats){stopInternal("Hoàn thành "+repeats+" vòng",true);return;}delay=Math.max(delay,intervalMs);}dueAt=now()+extra+Math.max(250,delay);}
+ public void setPaused(boolean value){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->setPaused(value));return;}if(!running)return;paused=value;visionEpoch++;now();if(pauseView!=null)pauseView.setText(paused?"TIẾP":"TẠM DỪNG");setStatus(paused?"Đã tạm dừng":"Tiếp tục kịch bản");}
+ public void stopMacro(String reason){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->stopMacro(reason));return;}stopInternal(reason==null?"Đã dừng":reason,true);}
+ private void stopInternal(String reason,boolean toast){++generation;running=paused=false;captureMode=screenshotPending=prepared=busy=false;activeMacroId=-1;main.removeCallbacksAndMessages(null);if(work!=null){work.cancel(true);work=null;}steps=null;removeControls();if(reason!=null&&!reason.isEmpty()){status=reason;if(toast)Toast.makeText(this,reason,Toast.LENGTH_LONG).show();}}
+ private void fail(long token,String reason){if(valid(token))stopInternal(reason==null?"Không thực hiện được kịch bản":reason,true);}
+ private Bitmap copyScreenshot(ScreenshotResult screenshot){HardwareBuffer buffer=screenshot.getHardwareBuffer();Bitmap hardware=null;try{if((long)buffer.getWidth()*buffer.getHeight()>MAX_SCREEN_PIXELS)throw new IllegalArgumentException("Màn hình vượt 8 megapixel");hardware=Bitmap.wrapHardwareBuffer(buffer,screenshot.getColorSpace());if(hardware==null)throw new IllegalStateException("Không đọc được ảnh màn hình");Bitmap copy=hardware.copy(Bitmap.Config.ARGB_8888,false);if(copy==null)throw new IllegalStateException("Không sao chép được ảnh");return copy;}finally{if(hardware!=null)hardware.recycle();buffer.close();}}
     public void showCaptureTool(){
         if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->showCaptureTool());return;}
-        stopInternal(null,false);captureMode=true;
+        stopInternal(null,false);pointMode="";MacroStore.prefs(this).edit().putString("pointMode","").apply();captureMode=true;
         status="Mở màn hình mẫu rồi bấm Chụp";
         if(!showControls(true)){captureMode=false;status="Không mở được công cụ chụp";Toast.makeText(this,status,Toast.LENGTH_LONG).show();}
     }
+
+    public void showPointTool(String mode){showCaptureTool();pointMode=mode;MacroStore.prefs(this).edit().putString("pointMode",mode).apply();}
 
     private void capture(){
         if(!captureMode||screenshotPending)return;
@@ -293,8 +128,8 @@ public class AutoService extends AccessibilityService {
                             main.post(()->{
                                 if(!captureMode||generation!=token)return;
                                 captureMode=false;screenshotPending=false;status="Đã chụp mẫu · Chọn vùng ảnh";
-                                MacroStore.prefs(AutoService.this).edit().putBoolean("captureReady",true).apply();
-                                Intent intent=new Intent().setClassName(getPackageName(),getPackageName()+".MainActivity").putExtra("capture",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                                MacroStore.prefs(AutoService.this).edit().putBoolean("captureReady",true).putString("pointMode",pointMode).apply();
+                                Intent intent=new Intent().setClassName(getPackageName(),getPackageName()+".MainActivity").putExtra("capture",true).putExtra("pointMode",pointMode).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
                                 try{startActivity(intent);}catch(Exception e){Toast.makeText(AutoService.this,"Mở Chạm Ảnh để chọn vùng mẫu đã chụp",Toast.LENGTH_LONG).show();}
                             });
                         }catch(Exception e){if(!bitmap.isRecycled())bitmap.recycle();main.post(()->captureError(token,"Không lưu được ảnh mẫu"));}
@@ -317,6 +152,7 @@ public class AutoService extends AccessibilityService {
         statusView=controlText(status,11,0xFFE8ECFF);statusView.setMaxLines(3);statusView.setContentDescription("Trạng thái; kéo để di chuyển thanh điều khiển");
         controls.addView(statusView,new LinearLayout.LayoutParams(0,-2,1));
         if(capture){TextView shoot=controlText("Chụp",13,0xFF2535A4);shoot.setGravity(Gravity.CENTER);shoot.setPadding(dp(12),dp(10),dp(12),dp(10));shoot.setMinHeight(dp(48));shoot.setBackground(rounded(0xFFE9EDFF,12));shoot.setOnClickListener(v->capture());LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,-2);p.leftMargin=dp(8);controls.addView(shoot,p);}
+        if(!capture){pauseView=controlText(paused?"TIẾP":"TẠM DỪNG",11,Color.WHITE);pauseView.setGravity(Gravity.CENTER);pauseView.setPadding(dp(8),dp(10),dp(8),dp(10));pauseView.setMinHeight(dp(48));pauseView.setBackground(rounded(0xFF414A69,12));pauseView.setOnClickListener(v->setPaused(!paused));LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-2,-2);pp.leftMargin=dp(6);controls.addView(pauseView,pp);}
         TextView stop=controlText(capture?"Đóng":"DỪNG",13,Color.WHITE);stop.setGravity(Gravity.CENTER);stop.setPadding(dp(13),dp(10),dp(13),dp(10));stop.setMinHeight(dp(48));stop.setBackground(rounded(capture?0xFF414A69:0xFFC74256,12));stop.setOnClickListener(v->stopMacro(capture?"Đã đóng công cụ chụp":"Đã dừng macro"));LinearLayout.LayoutParams stopLayout=new LinearLayout.LayoutParams(-2,-2);stopLayout.leftMargin=dp(8);controls.addView(stop,stopLayout);
         int width=Math.min(dp(360),getResources().getDisplayMetrics().widthPixels-dp(24));
         controlParams=new WindowManager.LayoutParams(width,-2,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);controlParams.gravity=Gravity.TOP|Gravity.LEFT;controlParams.x=dp(12);controlParams.y=dp(48);
@@ -326,10 +162,10 @@ public class AutoService extends AccessibilityService {
             if(event.getAction()==MotionEvent.ACTION_MOVE){int screenW=getResources().getDisplayMetrics().widthPixels,screenH=getResources().getDisplayMetrics().heightPixels;controlParams.x=Math.max(0,Math.min(screenW-controls.getWidth(),startX+Math.round(event.getRawX()-downX)));controlParams.y=Math.max(0,Math.min(screenH-controls.getHeight(),startY+Math.round(event.getRawY()-downY)));try{windows.updateViewLayout(controls,controlParams);}catch(Exception ignored){}return true;}
             return true;
         }});
-        try{windows.addView(controls,controlParams);return true;}catch(Exception e){controls=null;statusView=null;controlParams=null;return false;}
+        try{windows.addView(controls,controlParams);return true;}catch(Exception e){controls=null;statusView=null;pauseView=null;controlParams=null;return false;}
     }
     private Rect controlRect(){if(controls==null)return null;int[] xy=new int[2];controls.getLocationOnScreen(xy);return new Rect(xy[0],xy[1],xy[0]+controls.getWidth(),xy[1]+controls.getHeight());}
-    private void removeControls(){if(controls!=null){try{windows.removeView(controls);}catch(Exception ignored){}controls=null;statusView=null;controlParams=null;}}
+    private void removeControls(){if(controls!=null){try{windows.removeView(controls);}catch(Exception ignored){}controls=null;statusView=null;pauseView=null;controlParams=null;}}
     @Override public void onConfigurationChanged(Configuration configuration){
         super.onConfigurationChanged(configuration);
         if(controls!=null&&controlParams!=null){

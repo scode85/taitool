@@ -1,0 +1,1 @@
+JSON-java 20240303 is a JVM-only test dependency (public domain); Android provides org.json at runtime. Not bundled in the APK. Download json.jar from https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar before tests when using the GitHub source checkout.

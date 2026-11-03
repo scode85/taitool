@@ -1,81 +1,78 @@
-# Chạm Ảnh 0.1.0
+# Chạm Ảnh 0.2.0
 
-Ứng dụng Android tự tìm ảnh mẫu trên màn hình rồi thực hiện thao tác chạm tại tâm ảnh. Đây là bản thử nghiệm độc lập với tên và giao diện riêng, có quy trình tạo macro ảnh tương tự các công cụ tự động hóa hình ảnh. Không thuộc Macrofy.
+Ứng dụng Android tạo kịch bản tự động bằng các thẻ thao tác. Giao diện và tên riêng, có quy trình làm macro tương tự các công cụ tự động hóa; không thuộc Macrofy. Android 11 trở lên, không cần root.
 
-## Yêu cầu
-- Android 11 (API 30) trở lên, không cần root.
-- Người dùng tự bật dịch vụ **Chạm Ảnh — tự động chạm** trong Cài đặt → Trợ năng.
-- Ứng dụng đích cho phép chụp màn hình. Không dùng được trên màn hình khóa hoặc ứng dụng bật bảo vệ ảnh chụp.
-- Cần giữ cùng độ phân giải, hướng màn hình, tỷ lệ giao diện với lúc lấy mẫu.
+## Thao tác hỗ trợ
+- Nhấn ảnh, nhấn giữ ảnh, nhấn đúp ảnh, chỉ chờ thấy ảnh.
+- Nhấn tọa độ, nhấn giữ, nhấn đúp: nhập X/Y hoặc chọn trực tiếp trên ảnh chụp màn hình ứng dụng đích.
+- Vuốt: nhập hai điểm hoặc kéo đường vuốt trên ảnh chụp; đặt thời lượng 100–5000 ms.
+- Về màn hình chính (Home), quay lại (Back).
+- Mở thanh thông báo, cài đặt nhanh, danh sách ứng dụng gần đây.
+- Mở một ứng dụng đã cài đặt từ danh sách ứng dụng có launcher.
+- Chờ 100 ms đến 10 phút.
 
-## Tính năng bản đầu
-- Tạo, đổi tên, xóa nhiều kịch bản; lưu trên máy.
-- Chọn ảnh từ bộ nhớ hoặc dùng thanh nổi chụp màn hình ứng dụng đích.
-- Kéo chọn vùng mẫu, tự từ chối ảnh quá ít chi tiết.
-- Tối đa 20 bước/kịch bản; sắp xếp lại, đặt tên và xóa bước.
-- Mỗi bước: tìm ảnh rồi chạm tâm, hoặc chỉ chờ thấy ảnh; độ trễ sau bước 0–10000 ms.
-- Độ khớp 70–99%; khoảng quét 1000–60000 ms; chờ ảnh 1–120 giây/bước; lặp 1–1000 vòng.
-- Đếm ngược 5 giây trước khi chạy để chuyển ứng dụng.
-- Nút **DỪNG** nổi luôn hiện khi chạy, kéo phần chữ trạng thái để di chuyển.
-- Dừng khi hết thời gian, lỗi chụp, thao tác bị hủy hoặc hoàn thành các vòng.
-- Tạm chờ khi khóa máy hoặc mở chính Chạm Ảnh/cài đặt quyền.
+## Trình tạo kịch bản
+- Tối đa 100 bước, 1–1000 vòng lặp; đặt thời gian nghỉ sau mỗi bước 0–60000 ms.
+- Các thẻ có tên, biểu tượng, thông số và nút Sửa bước.
+- Menu ⋯ để sao chép bước, chuyển lên/xuống, xóa bước.
+- Bộ chọn Thêm thao tác chia thành các ô lớn, dễ tìm.
+- Kịch bản mẫu Home → Chờ → Thông báo → Chờ → Quay lại để làm quen, không tự chạy.
+- Thanh nổi có **TẠM DỪNG / TIẾP** và **DỪNG**; kéo phần chữ trạng thái để di chuyển.
+- Đếm ngược 5 giây trước khi chạy. Thời gian chờ/đếm ngược dừng tính khi tạm dừng hoặc khóa màn hình.
+- Kịch bản 0.1.0 tiếp tục dùng được. Cài đè APK để giữ dữ liệu, không gỡ bản cũ.
 
-## Cài bằng Termux vào Download
-```
+## Tải vào Download bằng Termux
+```sh
 termux-setup-storage
 pkg install curl -y
-curl -fL -o ~/storage/downloads/ChamAnh.apk https://raw.githubusercontent.com/scode85/taitool/main/cham-anh/ChamAnh.apk
+curl -fL -o ~/storage/downloads/ChamAnh.apk https://raw.githubusercontent.com/scode85/taitool/main/cham-anh/ChamAnh-0.2.0.apk
 termux-open --view --content-type application/vnd.android.package-archive ~/storage/downloads/ChamAnh.apk
 ```
+Cho phép bộ nhớ sau lệnh đầu; cho phép Termux cài ứng dụng nếu Android yêu cầu.
 
-Sau khi chạy `termux-setup-storage`, cho phép truy cập bộ nhớ trước khi tải. Cho phép Termux cài ứng dụng nếu Android yêu cầu.
+## Dùng nhanh
+1. Mở Chạm Ảnh, bật dịch vụ trong **Cài đặt → Trợ năng → Chạm Ảnh**. Bật quyền không tự chạy kịch bản.
+2. Tạo kịch bản, bấm **Thêm thao tác**, chọn việc cần thực hiện.
+3. **Nhấn ảnh:** chụp ảnh ứng dụng đích hoặc chọn từ bộ nhớ, cắt vùng có chữ/biểu tượng. Trong Sửa bước, chọn nhấn, giữ, đúp hoặc chỉ chờ ảnh.
+4. **Tọa độ / Vuốt:** nhập số pixel hoặc bấm **Chọn trên ảnh màn hình**. Chuyển sang app đích, bấm Chụp trên thanh nổi. Chạm một điểm hoặc kéo đường vuốt trên ảnh; thao tác chọn điểm không gửi chạm thật. Xác nhận thông số rồi lưu bước.
+5. **Home / Back / Thông báo / Cài đặt nhanh / Đa nhiệm:** thêm bước, đặt thời gian nghỉ và lưu. Mở ứng dụng thì chọn app trong danh sách.
+6. Dùng ⋯ để sắp xếp và sao chép; đặt số vòng lặp và bấm Lưu thiết lập.
+7. Bấm Chạy sau 5 giây. Chuyển sang app đích nếu kịch bản không có bước mở app. Thanh nổi luôn hiện khi chạy.
+8. Tạm dừng để nghỉ, TIẾP để tiếp tục, DỪNG để kết thúc. Mỗi lần Chạy mới bắt đầu lại từ bước đầu.
 
-## Hướng dẫn sử dụng
-1. Mở Chạm Ảnh → Tạo kịch bản mới.
-2. Bật quyền Trợ năng bằng nút trong ứng dụng; đọc nội dung giải thích, mở Cài đặt, bật đúng dịch vụ Chạm Ảnh. Bật quyền không tự chạy macro.
-3. **Chụp mẫu:** bấm Chụp mẫu, ứng dụng về nền. Mở ứng dụng đích, di chuyển thanh nổi khỏi nút muốn chụp, bấm Chụp. Thanh nổi tạm ẩn khi lấy mẫu; Chạm Ảnh mở lại để cắt vùng.
-4. Hoặc **Chọn ảnh:** chọn ảnh chụp màn hình cùng thiết bị và đúng kích thước gốc. Kéo một hình chữ nhật quanh nút có chữ hoặc biểu tượng; bấm Lưu ảnh mẫu.
-5. Thêm các bước tiếp theo. Sửa bước để đặt tên, độ trễ, chọn chỉ chờ ảnh hoặc chạm. Dùng ↑/↓ để đổi thứ tự.
-6. Đặt số vòng, độ khớp và thời gian chờ; lưu cấu hình.
-7. Bấm Chạy sau 5 giây, chuyển sang ứng dụng đích. Giữ thanh nổi không che vùng cần tìm. Bấm DỪNG để kết thúc.
-
-Nếu Android 13+ chặn bật Trợ năng cho ứng dụng cài ngoài, hãy xem Thông tin ứng dụng → menu ⋮ → Cho phép cài đặt bị hạn chế (tên mục tùy hãng máy), sau đó quay lại Trợ năng để bật. Bạn luôn có thể thu hồi quyền bằng cách tắt dịch vụ trong Cài đặt.
-
-## Giới hạn nhận diện
-- Nhận diện ở cùng kích thước gốc; chưa có tự đổi tỷ lệ, OCR, nhận diện AI hay ghi lại thao tác.
-- Điểm khớp đo tương đồng ảnh, không phải xác suất chắc chắn chạm đúng.
-- Ảnh giống nhau ở nhiều vị trí có thể chọn vùng khác ý định. Hãy lấy mẫu có thêm chi tiết phân biệt và quan sát lần chạy đầu.
-- Chọn vùng 12×12 đến 1024×1024 pixel; tổng mẫu của một macro tối đa 4 megapixel. Ảnh nguồn và màn hình tối đa 8 megapixel.
-- Kéo thanh điều khiển khỏi vùng mục tiêu; vùng thanh nổi bị loại khỏi nhận diện.
-- Chưa hỗ trợ nhấn giữ, vuốt, nhập văn bản, điều kiện rẽ nhánh, xuất/nhập kịch bản hay chạy khi mở khóa tự động.
-- Thay đổi trang/hình ảnh ngay giữa lúc chụp và chạm có thể làm vị trí không còn đúng. Có kiểm tra app, hướng và tuổi ảnh trước chạm nhưng không loại trừ mọi thay đổi giao diện.
-- Một số hãng máy có thể dừng dịch vụ Trợ năng hoặc hạn chế chụp màn hình. Cần bật lại thủ công; không tự chạy khi dịch vụ kết nối.
+## Ghi chú hoạt động
+- Ảnh phải cùng tỷ lệ gốc; chưa hỗ trợ tự đổi tỷ lệ hoặc OCR.
+- Tọa độ lưu theo vị trí tương đối và kích thước màn hình nguồn; từ chối khi đổi hướng/tỷ lệ quá 5%. Bố cục app vẫn phải phù hợp với khi chọn điểm.
+- Thanh thông báo có thể được mở rồi thao tác bằng bước tọa độ/ảnh tiếp theo. Chụp màn hình phụ thuộc Android và hãng máy.
+- Ảnh nguồn/màn hình tối đa 8 megapixel; vùng mẫu 12×12–1024×1024; tổng các mẫu khác nhau tối đa 4 megapixel.
+- Kéo thanh nổi khỏi vùng thao tác. Ảnh ở vùng thanh nổi không được nhận diện; tọa độ/vuốt qua thanh nổi sẽ dừng và yêu cầu chọn lại vị trí thanh.
+- Độ khớp là điểm tương đồng, không bảo đảm đúng 100%. Hình trùng lặp và chuyển trang nhanh có thể làm vị trí không như ý.
+- Bước ảnh chờ 1–120 giây, quét mỗi 1000–60000 ms; hết thời gian thì dừng. Các bước hệ thống và tọa độ không cần có ảnh mẫu.
+- Hệ thống có thể hủy cử chỉ đang diễn ra khi bạn chạm màn hình; lúc đó kịch bản dừng. Tạm dừng hiệu quả nhất giữa các bước.
+- Ứng dụng bảo vệ ảnh chụp không hỗ trợ bước ảnh. Không gửi chạm tự động trong chính Chạm Ảnh hoặc màn hình cấp quyền/cài đặt; các bước Home/Back vẫn dùng để điều hướng ra ngoài.
+- Chưa có OCR, nhập văn bản, rẽ nhánh, xuất/nhập kịch bản hoặc ghi toàn bộ cử chỉ tự động. Đây là APK thử nghiệm, chưa phải bản phát hành Google Play.
 
 ## Dữ liệu và quyền
-- Trợ năng chỉ dùng để lấy ảnh màn hình và gửi cử chỉ; không bật đọc cây nội dung cửa sổ.
-- Ảnh được xử lý tại thiết bị, không yêu cầu quyền Internet, không có máy chủ.
-- Kịch bản, ảnh mẫu và ảnh chụp tạm nằm trong dữ liệu riêng của ứng dụng; gỡ cài đặt sẽ xóa dữ liệu. Sao lưu Android đã tắt.
-- Dừng chạy không tự tắt quyền Trợ năng; có thể thu hồi quyền trong Cài đặt.
-- APK ký bằng khóa thử nghiệm, chưa phải bản phát hành Google Play.
+Trợ năng được dùng để chụp màn hình, gửi cử chỉ và thực hiện điều hướng trong kịch bản bạn tạo. Không bật đọc cây nội dung cửa sổ, không có quyền Internet. Ảnh và kịch bản nằm trong vùng dữ liệu riêng trên máy; gỡ ứng dụng sẽ xóa dữ liệu, sao lưu Android đã tắt.
 
-## Mã nguồn và biên dịch
-Mã Java thuần, không phụ thuộc AndroidX hoặc thư viện nhận diện bên ngoài. Cần Android SDK platform35/build-tools35.0.0, Java runtime21, zip, Eclipse ECJ3.40.0.
+Nếu Android 13+ chặn bật Trợ năng cho ứng dụng cài ngoài, xem **Thông tin ứng dụng → menu ⋮ → Cho phép cài đặt bị hạn chế** (tên tùy hãng), sau đó quay về Trợ năng để bật. Có thể tắt dịch vụ để thu hồi quyền bất cứ lúc nào.
 
-Trong source ZIP đã kèm ecj.jar. Nếu lấy từ GitHub:
-```
+## Biên dịch
+Java thuần và API Android35; Android SDK platform35/build-tools35.0.0, Java runtime21, zip, ECJ3.40.0.
+```sh
 curl -fL -o ecj.jar https://repo.maven.apache.org/maven2/org/eclipse/jdt/ecj/3.40.0/ecj-3.40.0.jar
-```
-ECJ: Eclipse Public License2.0, https://www.eclipse.org/legal/epl-2.0/.
-
-```
 ANDROID_SDK_ROOT=/duong/dan/sdk BUILD_TOOLS_PATH=/duong/dan/sdk/build-tools/35.0.0 ./build.sh
-./tests/run.sh
 ```
-APK ở build/ChamAnh.apk. Khóa thử nghiệm sinh cục bộ trong build/local-test.jks, không đưa lên GitHub. Giữ khóa ký nếu muốn phát hành cập nhật cài đè.
+ECJ được kèm trong source ZIP; Eclipse Public License2.0: https://www.eclipse.org/legal/epl-2.0/. Khóa thử nghiệm sinh cục bộ trong build/local-test.jks; không đưa khóa lên GitHub và cần giữ khóa để cập nhật cài đè.
 
 ## Kiểm tra
-- 26 kiểm tra thuật toán ảnh trên JVM: có/không có mẫu, nhiễu, biên, màu/texture sai, ảnh trong suốt, kích thước không hợp lệ, ngắt luồng và tọa độ sau bước tìm thô/tinh.
-- Biên dịch Java, DEX minAPI30, tài nguyên Android; kiểm tra căn chỉnh, manifest và chữ ký APK.
-- Chưa chạy APK trên điện thoại hoặc giả lập trong môi trường này.
+68 kiểm tra JVM đã qua: 26 về nhận diện ảnh, 42 về loại bước, tham số, tương thích mẫu cũ, tọa độ và đồng hồ tạm dừng. Biên dịch APK, kiểm tra tài nguyên/manifest, căn chỉnh và chữ ký; đối chiếu chứng chỉ ký với 0.1.0 để hỗ trợ cập nhật giữ dữ liệu.
 
-Cần kiểm thử trên thiết bị thật: cấp/tắt Trợ năng, chụp-cắt ảnh, chọn ảnh từ bộ nhớ, chạm mục tiêu và chỉ chờ, nhiều bước/vòng, dừng nổi, hết giờ, khóa màn hình, xoay máy, mất quyền, ứng dụng chặn ảnh, chạm khi ứng dụng chuyển trang.
+```sh
+mkdir -p tests/lib
+curl -fL -o tests/lib/json.jar https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar
+./tests/run.sh
+```
+JSON-java là phụ thuộc chỉ dùng trong kiểm thử JVM (public domain), không đóng gói vào APK. Source ZIP đã kèm jar kiểm thử.
+
+Chưa chạy trên điện thoại/giả lập trong môi trường này. Cần thử trên máy thật: từng thao tác hệ thống, nhập/chọn tọa độ, vuốt, ảnh, nhiều bước/vòng, tạm dừng khi đang chờ, nút DỪNG, khóa/đổi hướng màn hình, từ chối quyền và mở thanh thông báo theo hãng máy.
