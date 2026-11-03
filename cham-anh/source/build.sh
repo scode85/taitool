@@ -7,7 +7,7 @@ ANDROID_JAR="$SDK_PATH/platforms/android-35/android.jar"
 rm -rf build/classes build/dex build/generated
 mkdir -p build/classes build/dex build/generated
 "$BUILD_TOOLS/aapt2" compile --dir res -o build/resources.zip
-"$BUILD_TOOLS/aapt2" link -I "$ANDROID_JAR" --manifest AndroidManifest.xml --version-code 2 --version-name 0.2.0 --java build/generated -o build/base.apk build/resources.zip
+"$BUILD_TOOLS/aapt2" link -I "$ANDROID_JAR" --manifest AndroidManifest.xml --version-code 3 --version-name 0.2.1 --java build/generated -o build/base.apk build/resources.zip
 java -jar ecj.jar -encoding UTF-8 -source 8 -target 8 -classpath "$ANDROID_JAR" -d build/classes src/vn/chamanh/*.java build/generated/vn/chamanh/R.java
 rm -f build/classes.jar
 (cd build/classes && zip -qr ../classes.jar .)

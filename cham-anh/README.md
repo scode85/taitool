@@ -1,6 +1,13 @@
-# Chạm Ảnh 0.2.0
+# Chạm Ảnh 0.2.1
 
 Ứng dụng Android tạo kịch bản tự động bằng các thẻ thao tác. Giao diện và tên riêng, có quy trình làm macro tương tự các công cụ tự động hóa; không thuộc Macrofy. Android 11 trở lên, không cần root.
+
+## Mới trong 0.2.1: thử từng bước
+Mỗi thẻ có nút **▶ Thử**. Chọn bước → xác nhận **Thử sau 5 giây** → chuyển sang ứng dụng đích. Phiên thử chỉ thực hiện hành động của bước đó đúng một lần, không chạy các bước khác và không dùng số vòng lặp của kịch bản. Thời gian quét, độ khớp và hạn chờ ảnh vẫn giữ theo kịch bản.
+
+Thanh nổi ghi **THỬ BƯỚC n**, có tạm dừng/tiếp tục và dừng. Kết thúc hiển thị **Đã thực hiện thử bước n** hoặc nguyên nhân lỗi. Kịch bản đã lưu không bị biến thành một bước hoặc đổi số vòng lặp. Muốn thử thay đổi trong màn hình sửa, hãy lưu bước trước.
+
+Đây là thao tác thật trên thiết bị, không phải mô phỏng. Thời gian nghỉ sau bước cuối không được chạy vì không có bước tiếp theo. Lệnh DỪNG ngăn các thao tác tiếp theo; một cử chỉ đã gửi cho Android có thể vẫn hoàn tất. Thông báo đã thực hiện nghĩa là Android đã chấp nhận/hoàn tất thao tác, không xác nhận kết quả bên trong ứng dụng đích.
 
 ## Thao tác hỗ trợ
 - Nhấn ảnh, nhấn giữ ảnh, nhấn đúp ảnh, chỉ chờ thấy ảnh.
@@ -25,7 +32,7 @@
 ```sh
 termux-setup-storage
 pkg install curl -y
-curl -fL -o ~/storage/downloads/ChamAnh.apk https://raw.githubusercontent.com/scode85/taitool/main/cham-anh/ChamAnh-0.2.0.apk
+curl -fL -o ~/storage/downloads/ChamAnh.apk https://raw.githubusercontent.com/scode85/taitool/main/cham-anh/ChamAnh-0.2.1.apk
 termux-open --view --content-type application/vnd.android.package-archive ~/storage/downloads/ChamAnh.apk
 ```
 Cho phép bộ nhớ sau lệnh đầu; cho phép Termux cài ứng dụng nếu Android yêu cầu.
@@ -66,7 +73,7 @@ ANDROID_SDK_ROOT=/duong/dan/sdk BUILD_TOOLS_PATH=/duong/dan/sdk/build-tools/35.0
 ECJ được kèm trong source ZIP; Eclipse Public License2.0: https://www.eclipse.org/legal/epl-2.0/. Khóa thử nghiệm sinh cục bộ trong build/local-test.jks; không đưa khóa lên GitHub và cần giữ khóa để cập nhật cài đè.
 
 ## Kiểm tra
-68 kiểm tra JVM đã qua: 26 về nhận diện ảnh, 42 về loại bước, tham số, tương thích mẫu cũ, tọa độ và đồng hồ tạm dừng. Biên dịch APK, kiểm tra tài nguyên/manifest, căn chỉnh và chữ ký; đối chiếu chứng chỉ ký với 0.1.0 để hỗ trợ cập nhật giữ dữ liệu.
+91 kiểm tra JVM đã qua: 26 về nhận diện ảnh, 42 về loại bước/tham số/đồng hồ và 23 về phiên thử từng bước, ảnh cũ, tính độc lập dữ liệu và loại trừ bước khác. Biên dịch APK, kiểm tra tài nguyên/manifest, căn chỉnh và chữ ký; đối chiếu chứng chỉ ký với bản cũ để hỗ trợ cập nhật giữ dữ liệu.
 
 ```sh
 mkdir -p tests/lib

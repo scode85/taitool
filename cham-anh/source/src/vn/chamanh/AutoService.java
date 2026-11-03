@@ -34,7 +34,7 @@ public class AutoService extends AccessibilityService {
  private boolean captureMode,screenshotPending,prepared,busy;
  private String foregroundPackage="",pointMode="";
  private ArrayList<Step> steps;
- private int stepIndex,cycle,repeats,intervalMs,timeoutMs;
+ private int stepIndex,cycle,repeats,intervalMs,timeoutMs,trialStep;
  private double threshold;
  private long startAt,stepDeadline,dueAt,sleepUntil;
  private RunClock clock;
@@ -47,11 +47,11 @@ public class AutoService extends AccessibilityService {
  private boolean valid(long token){return running&&generation==token&&instance==this;}
  private int bounded(int n,int lo,int hi,String label){if(n<lo||n>hi)throw new IllegalArgumentException(label+" không hợp lệ");return n;}
  private long now(){long real=SystemClock.elapsedRealtime();boolean locked=!unlocked();if(locked&&!wasLocked)visionEpoch++;wasLocked=locked;clock.setPaused(paused||locked,real);return clock.now(real);}
- private void setStatus(String s){status=s;if(statusView!=null)statusView.setText(s);}
+ private void setStatus(String s){status=trialStep>0?"THỬ BƯỚC "+trialStep+" · "+s:s;if(statusView!=null)statusView.setText(status);}
  public void startMacro(JSONObject input){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->startMacro(input));return;}stopInternal(null,false);try{
-  JSONObject macro=new JSONObject(input.toString());JSONArray raw=macro.optJSONArray("steps");if(raw==null||raw.length()<1||raw.length()>100)throw new IllegalArgumentException("Kịch bản cần từ 1 đến 100 bước");
-  repeats=bounded(macro.optInt("repeat",1),1,1000,"Số vòng");intervalMs=bounded(macro.optInt("interval",1500),1000,60000,"Khoảng quét");timeoutMs=bounded(macro.optInt("timeout",15),1,120,"Thời gian chờ")*1000;threshold=bounded(macro.optInt("threshold",92),70,99,"Độ khớp")/100.0;
-  long token=++generation;clock=new RunClock();running=true;paused=false;prepared=busy=false;activeMacroId=macro.optLong("id");foregroundPackage=getPackageName();cycle=stepIndex=0;stepDeadline=sleepUntil=0;startAt=now()+5000;dueAt=startAt;status="Chuẩn bị · Chạy sau 5 giây";
+  JSONObject macro=new JSONObject(input.toString());trialStep=macro.optInt("trialStep",0);if(trialStep<0||trialStep>100)throw new IllegalArgumentException("Chỉ số bước thử không hợp lệ");JSONArray raw=macro.optJSONArray("steps");if(raw==null||raw.length()<1||raw.length()>100)throw new IllegalArgumentException("Kịch bản cần từ 1 đến 100 bước");
+  if(trialStep>0&&raw.length()!=1)throw new IllegalArgumentException("Phiên thử chỉ được chứa một bước");repeats=trialStep>0?1:bounded(macro.optInt("repeat",1),1,1000,"Số vòng");intervalMs=bounded(macro.optInt("interval",1500),1000,60000,"Khoảng quét");timeoutMs=bounded(macro.optInt("timeout",15),1,120,"Thời gian chờ")*1000;threshold=bounded(macro.optInt("threshold",92),70,99,"Độ khớp")/100.0;
+  long token=++generation;clock=new RunClock();running=true;paused=false;prepared=busy=false;activeMacroId=macro.optLong("id");foregroundPackage=getPackageName();cycle=stepIndex=0;stepDeadline=sleepUntil=0;startAt=now()+5000;dueAt=startAt;status=trialStep>0?"Thử bước "+trialStep+" sau 5 giây":"Chuẩn bị · Chạy sau 5 giây";
   if(!showControls(false)){stopInternal("Không hiển thị được nút DỪNG",true);return;}
   work=worker.submit(()->{try{ArrayList<Step> loaded=loadSteps(raw);main.post(()->{if(valid(token)){steps=loaded;prepared=true;}});}catch(Exception e){main.post(()->fail(token,e.getMessage()));}catch(OutOfMemoryError e){main.post(()->fail(token,"Ảnh mẫu quá lớn. Hãy cắt nhỏ hơn."));}});
   schedule(token,0);
@@ -90,11 +90,11 @@ public class AutoService extends AccessibilityService {
   Path path=new Path();path.moveTo(x,y);boolean swipe="swipe".equals(s.action);if(swipe)path.lineTo(x2,y2);boolean twice=s.action.contains("double_tap");int duration=swipe||s.action.contains("long_press")?s.duration:70;GestureDescription.Builder builder=new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,duration));if(twice)builder.addStroke(new GestureDescription.StrokeDescription(path,180,70));busy=true;
   try{boolean ok=dispatchGesture(builder.build(),new GestureResultCallback(){@Override public void onCompleted(GestureDescription g){if(valid(token)){busy=false;advance(token,0);}}@Override public void onCancelled(GestureDescription g){if(valid(token))fail(token,"Cử chỉ bị hủy. Kịch bản đã dừng.");}},main);if(!ok)fail(token,"Android từ chối thao tác chạm");}catch(Exception e){fail(token,"Tọa độ hoặc cử chỉ không hợp lệ");}
  }
- private void advance(long token,long extra){if(!valid(token))return;int delay=steps.get(stepIndex).spec.delay;stepIndex++;stepDeadline=sleepUntil=0;if(stepIndex>=steps.size()){stepIndex=0;cycle++;if(cycle>=repeats){stopInternal("Hoàn thành "+repeats+" vòng",true);return;}delay=Math.max(delay,intervalMs);}dueAt=now()+extra+Math.max(250,delay);}
+ private void advance(long token,long extra){if(!valid(token))return;int delay=steps.get(stepIndex).spec.delay;stepIndex++;stepDeadline=sleepUntil=0;if(stepIndex>=steps.size()){stepIndex=0;cycle++;if(cycle>=repeats){stopInternal(trialStep>0?"Đã thực hiện thử bước "+trialStep:"Hoàn thành "+repeats+" vòng",true);return;}delay=Math.max(delay,intervalMs);}dueAt=now()+extra+Math.max(250,delay);}
  public void setPaused(boolean value){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->setPaused(value));return;}if(!running)return;paused=value;visionEpoch++;now();if(pauseView!=null)pauseView.setText(paused?"TIẾP":"TẠM DỪNG");setStatus(paused?"Đã tạm dừng":"Tiếp tục kịch bản");}
  public void stopMacro(String reason){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->stopMacro(reason));return;}stopInternal(reason==null?"Đã dừng":reason,true);}
- private void stopInternal(String reason,boolean toast){++generation;running=paused=false;captureMode=screenshotPending=prepared=busy=false;activeMacroId=-1;main.removeCallbacksAndMessages(null);if(work!=null){work.cancel(true);work=null;}steps=null;removeControls();if(reason!=null&&!reason.isEmpty()){status=reason;if(toast)Toast.makeText(this,reason,Toast.LENGTH_LONG).show();}}
- private void fail(long token,String reason){if(valid(token))stopInternal(reason==null?"Không thực hiện được kịch bản":reason,true);}
+ private void stopInternal(String reason,boolean toast){++generation;trialStep=0;running=paused=false;captureMode=screenshotPending=prepared=busy=false;activeMacroId=-1;main.removeCallbacksAndMessages(null);if(work!=null){work.cancel(true);work=null;}steps=null;removeControls();if(reason!=null&&!reason.isEmpty()){status=reason;if(toast)Toast.makeText(this,reason,Toast.LENGTH_LONG).show();}}
+ private void fail(long token,String reason){if(valid(token)){String message=reason==null?"Không thực hiện được kịch bản":reason;stopInternal(trialStep>0?"Thử bước "+trialStep+": "+message:message,true);}}
  private Bitmap copyScreenshot(ScreenshotResult screenshot){HardwareBuffer buffer=screenshot.getHardwareBuffer();Bitmap hardware=null;try{if((long)buffer.getWidth()*buffer.getHeight()>MAX_SCREEN_PIXELS)throw new IllegalArgumentException("Màn hình vượt 8 megapixel");hardware=Bitmap.wrapHardwareBuffer(buffer,screenshot.getColorSpace());if(hardware==null)throw new IllegalStateException("Không đọc được ảnh màn hình");Bitmap copy=hardware.copy(Bitmap.Config.ARGB_8888,false);if(copy==null)throw new IllegalStateException("Không sao chép được ảnh");return copy;}finally{if(hardware!=null)hardware.recycle();buffer.close();}}
     public void showCaptureTool(){
         if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->showCaptureTool());return;}
