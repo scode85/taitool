@@ -1,4 +1,5 @@
 <resources>
+    <string name="rest_accessibility_description">An Tâm nhận biết ứng dụng đang mở và đưa về màn hình chính hoặc hiển thị màn hình nghỉ khi hết thời gian ứng dụng bạn chọn. Chỉ áp dụng trong phiên theo dõi do bạn bật. Không đọc nội dung cửa sổ, không chụp màn hình, không có quyền Internet. Có thể dừng theo dõi và thu hồi quyền bất cứ lúc nào.</string>
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#176B56</item>
